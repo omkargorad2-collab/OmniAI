@@ -109,7 +109,7 @@ async def llm(messages):
                 502,
                 'Chat provider request failed. Check Render logs.'
             )
-
+@app.post('/api/chat')
 async def chat(session:str=Form('default'),prompt:str=Form(...),file:UploadFile|None=File(None)):
     if not prompt.strip(): raise HTTPException(400,'Message required')
     if len(prompt)>12000: raise HTTPException(400,'Message too long')
