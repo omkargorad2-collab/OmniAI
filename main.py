@@ -149,8 +149,7 @@ def delete_history(session: str):
     return {'ok': True, 'deleted_session': session}
     
 
-@app.post('/api/image/generate')
-async def image_generate(prompt:str=Form(...)):
+
 
 @app.post('/api/image/generate')
 async def image_generate(
