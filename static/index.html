@@ -60,6 +60,14 @@ video{max-width:100%}
  .hero{margin:20px 0}
  .hero h2{font-size:26px}
 }
+ 
+.history-row{display:flex;gap:4px;align-items:stretch;min-width:0}
+.history-row .history-item{flex:1;min-width:0}
+.history-actions{display:flex;gap:3px}
+.history-actions button{padding:6px;font-size:12px}
+.rename-btn{background:#293456}
+.delete-btn{background:#6d2d43}
+           
 </style>
 </head>
 <body>
@@ -183,6 +191,7 @@ function saveSessions(){
   renderHistory();
 }
 
+
 function renderHistory(){
   const list = $('historyList');
   list.replaceChildren();
@@ -196,14 +205,76 @@ function renderHistory(){
   }
 
   sessions.forEach(item => {
-    const b = document.createElement('button');
-    b.className = 'history-item' + (item.id === session ? ' selected' : '');
-    b.textContent = item.title || 'New Chat';
-    b.title = item.title || 'New Chat';
-    b.onclick = () => openChat(item.id);
-    list.append(b);
+    const row = document.createElement('div');
+    row.className = 'history-row';
+
+    const open = document.createElement('button');
+    open.className = 'history-item' +
+      (item.id === session ? ' selected' : '');
+    open.textContent = item.title || 'New Chat';
+    open.title = item.title || 'New Chat';
+    open.onclick = () => openChat(item.id);
+
+    const actions = document.createElement('div');
+    actions.className = 'history-actions';
+
+    const rename = document.createElement('button');
+    rename.textContent = '✏️';
+    rename.title = 'Rename chat';
+    rename.onclick = () => {
+      const answer = prompt('Enter a new chat name:', item.title || 'New Chat');
+      if(answer === null) return;
+      if(!answer.trim()){
+        alert('Chat name cannot be empty.');
+        return;
+      }
+      item.title = answer.trim().slice(0,60);
+      item.updated = Date.now();
+      saveSessions();
+    };
+
+    const remove = document.createElement('button');
+    remove.textContent = '🗑️';
+    remove.title = 'Delete chat';
+    remove.onclick = async () => {
+      if(!confirm('Delete this chat and all its saved messages?')) return;
+
+      try{
+        const response = await fetch(
+          '/api/history/' + encodeURIComponent(item.id),
+          {method:'DELETE'}
+        );
+        const data = await response.json();
+
+        if(!response.ok) throw Error(data.detail || 'Delete failed');
+
+        sessions = sessions.filter(s => s.id !== item.id);
+
+        if(item.id === session){
+          session = makeId();
+          sessions.unshift({
+            id:session,
+            title:'New Chat',
+            updated:Date.now()
+          });
+          clearMessages();
+          $('prompt').value = '';
+          $('chatFile').value = '';
+          $('status').textContent = '';
+        }
+
+        saveSessions();
+      }catch(err){
+        alert('Delete failed: ' + err.message);
+      }
+    };
+
+    actions.append(rename,remove);
+    row.append(open,actions);
+    list.append(row);
   });
 }
+
 
 function ensureSession(){
   let item = sessions.find(s => s.id === session);
