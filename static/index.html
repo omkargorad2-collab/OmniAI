@@ -480,7 +480,13 @@ $('toolForm').addEventListener('submit',async e => {
       return;
     }
     f.append('prompt',p);
-    if(current === 'video') endpoint = '/api/video/generate';
+
+if(current === 'image'){
+  f.append('style',$('imageStyle').value);
+  f.append('size',$('imageSize').value);
+}
+
+if(current === 'video') endpoint = '/api/video/generate';
   }
 
   $('toolButton').disabled = true;
