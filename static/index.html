@@ -557,16 +557,7 @@ fetch('/api/status')
   .catch(() => {
     $('status').textContent = 'Backend not connected';
   });
- const imageOptions = document.getElementById('imageOptions');
-
-document.querySelectorAll('[data-tab]').forEach(button => {
-  button.addEventListener('click', () => {
-    imageOptions.classList.toggle(
-      'hidden',
-      button.dataset.tab !== 'image'
-    );
-  });
-});
+ 
 </script>
 </body>
 </html>
