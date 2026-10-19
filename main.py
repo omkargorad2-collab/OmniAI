@@ -140,6 +140,14 @@ async def chat(session:str=Form('default'),prompt:str=Form(...),file:UploadFile|
 def history(session:str):
     with db() as c:rows=c.execute('SELECT role,content,created FROM messages WHERE session=? ORDER BY created LIMIT 100',(session[:100],)).fetchall()
     return {'messages':[dict(r) for r in rows]}
+ 
+@app.delete('/api/history/{session}')
+def delete_history(session: str):
+    session = session[:100]
+    with db() as c:
+        c.execute('DELETE FROM messages WHERE session = ?', (session,))
+    return {'ok': True, 'deleted_session': session}
+    
 
 @app.post('/api/image/generate')
 async def image_generate(prompt:str=Form(...)):
