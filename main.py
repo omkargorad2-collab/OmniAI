@@ -55,17 +55,61 @@ def intent(text):
     if re.search(r'\b(solve|equation|homework|doubt|calculate|explain)\b',s):return 'doubt'
     return 'chat'
 
+
 async def llm(messages):
-    key=os.getenv('LLM_API_KEY')
-    if not key: raise HTTPException(503,'Chat model not configured. Set LLM_API_KEY in .env.')
-    url=os.getenv('LLM_BASE_URL','https://api.openai.com/v1').rstrip('/')+'/chat/completions'
+    key = os.getenv('LLM_API_KEY')
+    if not key:
+        raise HTTPException(
+            503, 'Chat model not configured. Set LLM_API_KEY.'
+        )
+
+    base = os.getenv(
+        'LLM_BASE_URL',
+        'https://api.openai.com/v1'
+    ).rstrip('/')
+    url = base + '/chat/completions'
+    model = os.getenv('LLM_MODEL', 'gpt-4o-mini')
+
     async with httpx.AsyncClient(timeout=90) as client:
         try:
-            r=await client.post(url,headers={'Authorization':f'Bearer {key}'},json={'model':os.getenv('LLM_MODEL','gpt-4o-mini'),'messages':messages,'temperature':0.6})
-            r.raise_for_status(); return r.json()['choices'][0]['message']['content']
-        except (httpx.HTTPError,KeyError,IndexError,ValueError) as e: raise HTTPException(502,f'LLM provider error: {str(e)[:250]}')
+            r = await client.post(
+                url,
+                headers={'Authorization': f'Bearer {key}'},
+                json={
+                    'model': model,
+                    'messages': messages,
+                    'temperature': 0.6
+                }
+            )
 
-@app.post('/api/chat')
+            if r.is_error:
+                # Log provider status and a short error body.
+                print(
+                    f'LLM provider returned HTTP {r.status_code}: '
+                    f'{r.text[:1000]}',
+                    flush=True
+                )
+                raise HTTPException(
+                    502,
+                    f'Chat provider returned HTTP {r.status_code}. '
+                    'Check Render logs for details.'
+                )
+
+            data = r.json()
+            return data['choices'][0]['message']['content']
+
+        except HTTPException:
+            raise
+        except (httpx.HTTPError, KeyError, IndexError, ValueError) as e:
+            print(
+                f'LLM request failed: {type(e).__name__}: {str(e)[:500]}',
+                flush=True
+            )
+            raise HTTPException(
+                502,
+                'Chat provider request failed. Check Render logs.'
+            )
+
 async def chat(session:str=Form('default'),prompt:str=Form(...),file:UploadFile|None=File(None)):
     if not prompt.strip(): raise HTTPException(400,'Message required')
     if len(prompt)>12000: raise HTTPException(400,'Message too long')
