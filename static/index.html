@@ -113,6 +113,23 @@ video{max-width:100%}
         <h2 id="toolTitle">AI Tool</h2>
         <p class="muted" id="toolDescription"></p>
         <form id="toolForm">
+         <div id="imageOptions" class="hidden">
+  <label for="imageStyle">Image Style</label>
+  <select id="imageStyle">
+    <option value="realistic">Realistic</option>
+    <option value="anime">Anime</option>
+    <option value="digital art">Digital Art</option>
+    <option value="3D render">3D Render</option>
+    <option value="watercolor">Watercolor</option>
+  </select>
+
+  <label for="imageSize">Image Size</label>
+  <select id="imageSize">
+    <option value="1024x1024">Square</option>
+    <option value="1536x1024">Landscape</option>
+    <option value="1024x1536">Portrait</option>
+  </select>
+         </div>
           <textarea id="toolPrompt" placeholder="Describe what you want..."></textarea>
           <div id="fileWrap" class="hidden">
             <input id="toolFile" type="file" accept="image/*">
