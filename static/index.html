@@ -1,13 +1,473 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OmniAI</title><style>
-:root{font-family:system-ui,Arial;color:#e8eaf6;background:#0c1020}*{box-sizing:border-box}body{margin:0}.app{display:flex;min-height:100vh}aside{width:235px;background:#141a30;padding:22px;flex-shrink:0}h1{font-size:25px;margin:0 0 6px;color:#a6b9ff}.muted{color:#9ca9c6;font-size:13px}nav{display:grid;gap:8px;margin-top:30px}button{cursor:pointer;background:#293456;border:1px solid #405078;border-radius:12px;color:white;padding:12px;font:inherit;text-align:left}button:hover,button.active{background:#4759a1}main{flex:1;min-width:0;display:flex;flex-direction:column;max-height:100vh}.top{padding:18px 24px;border-bottom:1px solid #293456;font-weight:700}.view{overflow:auto;flex:1;padding:24px;max-width:900px;width:100%;margin:auto}.hero{text-align:center;margin:40px 0 28px}.hero h2{font-size:32px}.messages{display:grid;gap:14px}.msg{padding:14px 18px;border-radius:15px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5}.user{background:#273a67;margin-left:12%}.assistant{background:#1b2542;margin-right:10%}.panel{background:#171f38;padding:20px;border:1px solid #334164;border-radius:18px;display:grid;gap:15px}textarea,input,select{width:100%;background:#0d152b;color:white;border:1px solid #405078;border-radius:10px;padding:12px;font:inherit}textarea{min-height:105px;resize:vertical}.send{background:#5369da;text-align:center;border:0;font-weight:700}.composer{padding:16px 24px;background:#10172a;display:grid;gap:8px}.composer textarea{min-height:62px}img.output{max-width:100%;max-height:500px;border-radius:12px}a{color:#a9bdff}.hidden{display:none!important}.notice{font-size:13px;color:#aebadd}.result{white-space:pre-wrap;overflow-wrap:anywhere}video{max-width:100%}@media(max-width:700px){.app{display:block}aside{width:100%;padding:12px}aside h1{font-size:21px}nav{display:flex;overflow:auto;margin-top:12px}nav button{white-space:nowrap;padding:9px}.view{padding:14px}.top{padding:12px}.composer{padding:12px}.hero{margin:20px 0}}
-</style></head><body><div class="app"><aside><h1>✦ OmniAI</h1><div class="muted">Multimodal AI Studio</div><nav><button data-tab="chat" class="active">💬 AI Chat</button><button data-tab="image">🎨 Generate Image</button><button data-tab="edit">🖼️ Edit Image</button><button data-tab="video">🎬 Generate Video</button><button data-tab="doubt">📚 Doubt Solver</button><button data-tab="docs">📄 PDF Chat</button></nav><p class="muted">Powered by NLP + LLM + Generative AI APIs</p></aside><main><div class="top" id="heading">AI Chat</div><div class="view"><section id="chatSection"><div class="hero"><h2>What can I help you create?</h2><p class="muted">Ask in English, Hindi or Hinglish</p></div><div id="messages" class="messages"></div></section><section id="toolSection" class="hidden"><div class="panel"><h2 id="toolTitle">AI Tool</h2><p class="muted" id="toolDescription"></p><form id="toolForm"><textarea id="toolPrompt" placeholder="Describe what you want..."></textarea><div id="fileWrap" class="hidden"><input id="toolFile" type="file" accept="image/*"></div><div id="operationWrap" class="hidden"><select id="operation"><option value="enhance">Enhance</option><option value="grayscale">Grayscale</option><option value="blur">Blur</option><option value="rotate">Rotate</option><option value="mirror">Mirror</option></select></div><button class="send" type="submit" id="toolButton">Generate</button></form><div id="toolResult" class="result"></div></div></section></div><form class="composer" id="chatForm"><textarea id="prompt" placeholder="Message OmniAI..."></textarea><input id="chatFile" type="file" accept="image/*,.pdf,.txt"><button class="send" id="chatSend">Send message ➤</button><div class="notice" id="status"></div></form></main></div><script>
-const $=id=>document.getElementById(id),tabs=[...document.querySelectorAll('[data-tab]')];let current='chat';let session=localStorage.getItem('omniai_session');if(!session){session=crypto.randomUUID();localStorage.setItem('omniai_session',session)}
-const names={chat:'AI Chat',image:'AI Image Generator',edit:'Image Editor',video:'AI Video Generator',doubt:'AI Doubt Solver',docs:'PDF & Document AI'};
-function tab(t){current=t;tabs.forEach(b=>b.classList.toggle('active',b.dataset.tab===t));$('heading').textContent=names[t];let isChat=['chat','doubt','docs'].includes(t);$('chatSection').classList.toggle('hidden',!isChat);$('chatForm').classList.toggle('hidden',!isChat);$('toolSection').classList.toggle('hidden',isChat);$('toolResult').replaceChildren();$('toolTitle').textContent=names[t];$('fileWrap').classList.toggle('hidden',t!=='edit');$('operationWrap').classList.toggle('hidden',t!=='edit');$('toolPrompt').classList.toggle('hidden',t==='edit');$('toolButton').textContent=t==='edit'?'Edit image':'Generate';$('toolDescription').textContent=t==='edit'?'Local enhancements are available. Advanced generative edits require an additional model.':t==='video'?'Requires a configured video model API.':'Requires an image generation API.';$('chatFile').accept=t==='docs'?'.pdf,.txt':t==='doubt'?'image/*,.pdf,.txt':'image/*,.pdf,.txt';$('prompt').placeholder=t==='doubt'?'Ask your academic question...':t==='docs'?'Ask about an uploaded PDF...':'Message OmniAI...'}tabs.forEach(b=>b.addEventListener('click',()=>tab(b.dataset.tab)));
-function addMsg(role,text){let d=document.createElement('div');d.className='msg '+role;d.textContent=text;$('messages').append(d);d.scrollIntoView({behavior:'smooth',block:'end'})}
-async function post(url,form){let r=await fetch(url,{method:'POST',body:form});let data=await r.json().catch(()=>({detail:'Invalid server response'}));if(!r.ok)throw Error(typeof data.detail==='string'?data.detail:JSON.stringify(data.detail));return data}
-$('chatForm').addEventListener('submit',async e=>{e.preventDefault();let prompt=$('prompt').value.trim(),file=$('chatFile').files[0];if(!prompt){$('status').textContent='Type a message first';return}let f=new FormData();f.append('session',session);f.append('prompt',prompt);if(file)f.append('file',file);addMsg('user',prompt+(file?' 📎 '+file.name:''));$('prompt').value='';$('chatFile').value='';$('chatSend').disabled=true;$('status').textContent='Thinking...';try{let d=await post('/api/chat',f);addMsg('assistant',d.answer);$('status').textContent=''}catch(err){addMsg('assistant','Error: '+err.message);$('status').textContent='Check your API configuration'}finally{$('chatSend').disabled=false}});
-$('toolForm').addEventListener('submit',async e=>{e.preventDefault();let f=new FormData(),endpoint='/api/image/generate';if(current==='edit'){if(!$('toolFile').files[0]){alert('Select an image');return}f.append('file',$('toolFile').files[0]);f.append('operation',$('operation').value);endpoint='/api/image/edit'}else{let p=$('toolPrompt').value.trim();if(!p){alert('Enter a prompt');return}f.append('prompt',p);if(current==='video')endpoint='/api/video/generate'}$('toolButton').disabled=true;$('toolResult').textContent='Processing...';try{let d=await post(endpoint,f);$('toolResult').replaceChildren();if(d.url){let img=document.createElement('img');img.className='output';img.src=d.url;$('toolResult').append(img,document.createElement('br'));let a=document.createElement('a');a.href=d.url;a.download='omniai-image.png';a.textContent='Download image';$('toolResult').append(a)}else if(d.id){let p=document.createElement('p');p.textContent='Video job: '+d.status+' ('+d.id+')';$('toolResult').append(p);let b=document.createElement('button');b.textContent='Check video status';b.type='button';b.onclick=async()=>{try{let r=await fetch('/api/video/status/'+encodeURIComponent(d.id)),v=await r.json();p.textContent='Status: '+v.status+(v.error?' — '+v.error:'');if(v.output){let a=document.createElement('a');a.href=Array.isArray(v.output)?v.output[0]:v.output;a.textContent='Open generated video';a.target='_blank';$('toolResult').append(a)}}catch(e){p.textContent=e.message}};$('toolResult').append(b)}if(d.note){let p=document.createElement('p');p.textContent=d.note;$('toolResult').append(p)}}catch(err){$('toolResult').textContent='Error: '+err.message}finally{$('toolButton').disabled=false}});
-fetch('/api/history/'+encodeURIComponent(session)).then(r=>r.json()).then(d=>d.messages.forEach(m=>addMsg(m.role,m.content))).catch(()=>{});fetch('/api/status').then(r=>r.json()).then(s=>{$('status').textContent=s.chat?'LLM connected':'Chat requires an LLM_API_KEY in server environment'}).catch(()=>{$('status').textContent='Backend not connected'});
-</script></body></html>
-                                                                                                                                                                                                                             
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OmniAI</title>
+<style>
+:root{font-family:system-ui,Arial;color:#e8eaf6;background:#0c1020}
+*{box-sizing:border-box}
+body{margin:0}
+.app{display:flex;min-height:100vh}
+aside{width:245px;background:#141a30;padding:18px;flex-shrink:0;display:flex;flex-direction:column;gap:10px}
+h1{font-size:25px;margin:0 0 6px;color:#a6b9ff}
+.muted{color:#9ca9c6;font-size:13px}
+button{cursor:pointer;background:#293456;border:1px solid #405078;border-radius:12px;color:white;padding:11px;font:inherit;text-align:left}
+button:hover,button.active{background:#4759a1}
+.new-chat{background:#5369da;text-align:center;font-weight:700;width:100%}
+.history-title{margin:15px 0 4px;font-size:14px;font-weight:700}
+#historyList{display:grid;gap:6px;max-height:35vh;overflow:auto}
+.history-item{font-size:13px;padding:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history-item.selected{background:#4759a1;border-color:#8090e8}
+nav{display:grid;gap:8px;margin-top:8px}
+main{flex:1;min-width:0;display:flex;flex-direction:column;height:100vh}
+.top{padding:18px 24px;border-bottom:1px solid #293456;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.view{overflow:auto;flex:1;padding:24px;max-width:900px;width:100%;margin:auto}
+.hero{text-align:center;margin:40px 0 28px}
+.hero h2{font-size:32px}
+.messages{display:grid;gap:14px}
+.msg{padding:14px 18px;border-radius:15px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5}
+.user{background:#273a67;margin-left:12%}
+.assistant{background:#1b2542;margin-right:10%}
+.panel{background:#171f38;padding:20px;border:1px solid #334164;border-radius:18px;display:grid;gap:15px}
+textarea,input,select{width:100%;background:#0d152b;color:white;border:1px solid #405078;border-radius:10px;padding:12px;font:inherit}
+textarea{min-height:105px;resize:vertical}
+.send{background:#5369da;text-align:center;border:0;font-weight:700}
+.composer{padding:16px 24px;background:#10172a;display:grid;gap:8px}
+.composer textarea{min-height:62px}
+.notice{font-size:13px;color:#aebadd}
+.result{white-space:pre-wrap;overflow-wrap:anywhere}
+img.output{max-width:100%;max-height:500px;border-radius:12px}
+a{color:#a9bdff}
+.hidden{display:none!important}
+video{max-width:100%}
+.small-btn{font-size:12px;padding:7px}
+@media(max-width:700px){
+ .app{display:block}
+ aside{width:100%;padding:12px}
+ aside h1{font-size:21px}
+ .sidebar-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+ #historyList{display:flex;overflow:auto;max-height:none;width:100%;padding-bottom:4px}
+ .history-item{min-width:125px;max-width:170px}
+ .history-title{margin-top:8px}
+ nav{display:flex;overflow:auto;margin-top:8px}
+ nav button{white-space:nowrap;padding:9px}
+ main{height:calc(100dvh - 255px);min-height:400px}
+ .view{padding:14px}
+ .top{padding:12px}
+ .composer{padding:12px}
+ .hero{margin:20px 0}
+ .hero h2{font-size:26px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<aside>
+  <h1>✦ OmniAI</h1>
+  <div class="muted">Multimodal AI Studio</div>
+
+  <button class="new-chat" id="newChat">＋ New Chat</button>
+
+  <div class="history-title">Recent Chats</div>
+  <div id="historyList"></div>
+
+  <nav>
+    <button data-tab="chat" class="active">💬 AI Chat</button>
+    <button data-tab="image">🎨 Generate Image</button>
+    <button data-tab="edit">🖼️ Edit Image</button>
+    <button data-tab="video">🎬 Generate Video</button>
+    <button data-tab="doubt">📚 Doubt Solver</button>
+    <button data-tab="docs">📄 PDF Chat</button>
+  </nav>
+
+  <p class="muted">Powered by NLP + LLM + Generative AI APIs</p>
+</aside>
+
+<main>
+  <div class="top">
+    <span id="heading">AI Chat</span>
+    <button class="small-btn" id="topNewChat">＋ New</button>
+  </div>
+
+  <div class="view">
+    <section id="chatSection">
+      <div class="hero" id="hero">
+        <h2>What can I help you create?</h2>
+        <p class="muted">Ask in English, Hindi or Hinglish</p>
+      </div>
+      <div id="messages" class="messages"></div>
+    </section>
+
+    <section id="toolSection" class="hidden">
+      <div class="panel">
+        <h2 id="toolTitle">AI Tool</h2>
+        <p class="muted" id="toolDescription"></p>
+        <form id="toolForm">
+          <textarea id="toolPrompt" placeholder="Describe what you want..."></textarea>
+          <div id="fileWrap" class="hidden">
+            <input id="toolFile" type="file" accept="image/*">
+          </div>
+          <div id="operationWrap" class="hidden">
+            <select id="operation">
+              <option value="enhance">Enhance</option>
+              <option value="grayscale">Grayscale</option>
+              <option value="blur">Blur</option>
+              <option value="rotate">Rotate</option>
+              <option value="mirror">Mirror</option>
+            </select>
+          </div>
+          <button class="send" type="submit" id="toolButton">Generate</button>
+        </form>
+        <div id="toolResult" class="result"></div>
+      </div>
+    </section>
+  </div>
+
+  <form class="composer" id="chatForm">
+    <textarea id="prompt" placeholder="Message OmniAI..."></textarea>
+    <input id="chatFile" type="file" accept="image/*,.pdf,.txt">
+    <button class="send" id="chatSend" type="submit">Send message ➤</button>
+    <div class="notice" id="status"></div>
+  </form>
+</main>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const tabs = [...document.querySelectorAll('[data-tab]')];
+
+const names = {
+  chat:'AI Chat',
+  image:'AI Image Generator',
+  edit:'Image Editor',
+  video:'AI Video Generator',
+  doubt:'AI Doubt Solver',
+  docs:'PDF & Document AI'
+};
+
+function makeId(){
+  return crypto.randomUUID
+    ? crypto.randomUUID()
+    : 'chat-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+}
+
+function readSessions(){
+  try{
+    const value = JSON.parse(localStorage.getItem('omniai_sessions') || '[]');
+    return Array.isArray(value) ? value : [];
+  }catch{
+    return [];
+  }
+}
+
+let sessions = readSessions();
+let session = localStorage.getItem('omniai_session');
+let current = 'chat';
+
+if(!session || !sessions.some(s => s.id === session)){
+  session = makeId();
+  sessions.unshift({
+    id:session,
+    title:'New Chat',
+    updated:Date.now()
+  });
+}
+
+function saveSessions(){
+  sessions.sort((a,b) => b.updated - a.updated);
+  sessions = sessions.slice(0,50);
+  localStorage.setItem('omniai_sessions',JSON.stringify(sessions));
+  localStorage.setItem('omniai_session',session);
+  renderHistory();
+}
+
+function renderHistory(){
+  const list = $('historyList');
+  list.replaceChildren();
+
+  if(!sessions.length){
+    const empty = document.createElement('div');
+    empty.className = 'muted';
+    empty.textContent = 'No conversations yet';
+    list.append(empty);
+    return;
+  }
+
+  sessions.forEach(item => {
+    const b = document.createElement('button');
+    b.className = 'history-item' + (item.id === session ? ' selected' : '');
+    b.textContent = item.title || 'New Chat';
+    b.title = item.title || 'New Chat';
+    b.onclick = () => openChat(item.id);
+    list.append(b);
+  });
+}
+
+function ensureSession(){
+  let item = sessions.find(s => s.id === session);
+  if(!item){
+    item = {id:session,title:'New Chat',updated:Date.now()};
+    sessions.unshift(item);
+  }
+  return item;
+}
+
+function updateTitle(prompt){
+  const item = ensureSession();
+  if(!item.title || item.title === 'New Chat'){
+    item.title = prompt.replace(/\s+/g,' ').slice(0,36);
+    if(prompt.length > 36) item.title += '…';
+  }
+  item.updated = Date.now();
+  saveSessions();
+}
+
+function addMsg(role,text){
+  $('hero').classList.add('hidden');
+  const d = document.createElement('div');
+  d.className = 'msg ' + role;
+  d.textContent = text;
+  $('messages').append(d);
+  d.scrollIntoView({behavior:'smooth',block:'end'});
+}
+
+function clearMessages(){
+  $('messages').replaceChildren();
+  $('hero').classList.remove('hidden');
+}
+
+async function post(url,form){
+  const r = await fetch(url,{method:'POST',body:form});
+  const data = await r.json().catch(() => ({detail:'Invalid server response'}));
+  if(!r.ok){
+    throw Error(typeof data.detail === 'string'
+      ? data.detail
+      : JSON.stringify(data.detail));
+  }
+  return data;
+}
+
+async function openChat(id){
+  session = id;
+  localStorage.setItem('omniai_session',session);
+  current = 'chat';
+  tabs.forEach(b => b.classList.toggle('active',b.dataset.tab === 'chat'));
+
+  $('heading').textContent = 'AI Chat';
+  $('chatSection').classList.remove('hidden');
+  $('chatForm').classList.remove('hidden');
+  $('toolSection').classList.add('hidden');
+  $('toolResult').replaceChildren();
+  $('status').textContent = 'Loading conversation...';
+  clearMessages();
+  renderHistory();
+
+  try{
+    const r = await fetch('/api/history/' + encodeURIComponent(session));
+    if(!r.ok) throw Error('History could not be loaded');
+    const data = await r.json();
+
+    clearMessages();
+    (data.messages || []).forEach(m => addMsg(m.role,m.content));
+    $('status').textContent = '';
+  }catch(err){
+    $('status').textContent = 'Could not load history: ' + err.message;
+  }
+}
+
+function newChat(){
+  session = makeId();
+  sessions.unshift({
+    id:session,
+    title:'New Chat',
+    updated:Date.now()
+  });
+  saveSessions();
+  clearMessages();
+  $('prompt').value = '';
+  $('chatFile').value = '';
+  $('status').textContent = '';
+  tab('chat');
+  $('prompt').focus();
+}
+
+$('newChat').addEventListener('click',newChat);
+$('topNewChat').addEventListener('click',newChat);
+
+function tab(t){
+  current = t;
+  tabs.forEach(b => b.classList.toggle('active',b.dataset.tab === t));
+
+  const isChat = ['chat','doubt','docs'].includes(t);
+  $('heading').textContent = names[t];
+  $('chatSection').classList.toggle('hidden',!isChat);
+  $('chatForm').classList.toggle('hidden',!isChat);
+  $('toolSection').classList.toggle('hidden',isChat);
+  $('toolResult').replaceChildren();
+
+  $('toolTitle').textContent = names[t];
+  $('fileWrap').classList.toggle('hidden',t !== 'edit');
+  $('operationWrap').classList.toggle('hidden',t !== 'edit');
+  $('toolPrompt').classList.toggle('hidden',t === 'edit');
+  $('toolButton').textContent = t === 'edit' ? 'Edit image' : 'Generate';
+
+  $('toolDescription').textContent =
+    t === 'edit'
+      ? 'Local image enhancements are available. Advanced generative edits require an additional model.'
+      : t === 'video'
+      ? 'Requires a configured video model API.'
+      : 'Requires a configured image generation API.';
+
+  $('chatFile').accept = '.pdf,.txt,image/*';
+  $('prompt').placeholder =
+    t === 'doubt' ? 'Ask your academic question...' :
+    t === 'docs' ? 'Ask about an uploaded PDF...' :
+    'Message OmniAI...';
+
+  if(isChat) $('status').textContent = '';
+}
+
+tabs.forEach(b => b.addEventListener('click',() => tab(b.dataset.tab)));
+
+$('chatForm').addEventListener('submit',async e => {
+  e.preventDefault();
+
+  const prompt = $('prompt').value.trim();
+  const file = $('chatFile').files[0];
+
+  if(!prompt){
+    $('status').textContent = 'Type a message first';
+    return;
+  }
+
+  const f = new FormData();
+  f.append('session',session);
+  f.append('prompt',prompt);
+  if(file) f.append('file',file);
+
+  addMsg('user',prompt + (file ? ' 📎 ' + file.name : ''));
+  updateTitle(prompt);
+
+  $('prompt').value = '';
+  $('chatFile').value = '';
+  $('chatSend').disabled = true;
+  $('status').textContent = 'Thinking...';
+
+  try{
+    const d = await post('/api/chat',f);
+    addMsg('assistant',d.answer);
+    $('status').textContent = '';
+    const item = ensureSession();
+    item.updated = Date.now();
+    saveSessions();
+  }catch(err){
+    addMsg('assistant','Error: ' + err.message);
+    $('status').textContent = 'Check your API configuration';
+  }finally{
+    $('chatSend').disabled = false;
+  }
+});
+
+$('toolForm').addEventListener('submit',async e => {
+  e.preventDefault();
+
+  const f = new FormData();
+  let endpoint = '/api/image/generate';
+
+  if(current === 'edit'){
+    if(!$('toolFile').files[0]){
+      alert('Select an image');
+      return;
+    }
+    f.append('file',$('toolFile').files[0]);
+    f.append('operation',$('operation').value);
+    endpoint = '/api/image/edit';
+  }else{
+    const p = $('toolPrompt').value.trim();
+    if(!p){
+      alert('Enter a prompt');
+      return;
+    }
+    f.append('prompt',p);
+    if(current === 'video') endpoint = '/api/video/generate';
+  }
+
+  $('toolButton').disabled = true;
+  $('toolResult').textContent = 'Processing...';
+
+  try{
+    const d = await post(endpoint,f);
+    $('toolResult').replaceChildren();
+
+    if(d.url){
+      const img = document.createElement('img');
+      img.className = 'output';
+      img.src = d.url;
+
+      const br = document.createElement('br');
+      const a = document.createElement('a');
+      a.href = d.url;
+      a.download = 'omniai-image.png';
+      a.textContent = 'Download image';
+
+      $('toolResult').append(img,br,a);
+    }else if(d.id){
+      const p = document.createElement('p');
+      p.textContent = 'Video job: ' + d.status + ' (' + d.id + ')';
+      $('toolResult').append(p);
+
+      const b = document.createElement('button');
+      b.textContent = 'Check video status';
+      b.type = 'button';
+
+      b.onclick = async () => {
+        try{
+          const r = await fetch('/api/video/status/' + encodeURIComponent(d.id));
+          const v = await r.json();
+          p.textContent = 'Status: ' + v.status + (v.error ? ' — ' + v.error : '');
+
+          if(v.output){
+            const a = document.createElement('a');
+            a.href = Array.isArray(v.output) ? v.output[0] : v.output;
+            a.textContent = 'Open generated video';
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            $('toolResult').append(a);
+          }
+        }catch(err){
+          p.textContent = err.message;
+        }
+      };
+
+      $('toolResult').append(b);
+    }
+
+    if(d.note){
+      const p = document.createElement('p');
+      p.textContent = d.note;
+      $('toolResult').append(p);
+    }
+  }catch(err){
+    $('toolResult').textContent = 'Error: ' + err.message;
+  }finally{
+    $('toolButton').disabled = false;
+  }
+});
+
+saveSessions();
+openChat(session);
+
+fetch('/api/status')
+  .then(r => r.json())
+  .then(s => {
+    if(s.chat) $('status').textContent = 'LLM connected';
+    else $('status').textContent = 'Chat requires an LLM_API_KEY in server environment';
+  })
+  .catch(() => {
+    $('status').textContent = 'Backend not connected';
+  });
+</script>
+</body>
+</html>
