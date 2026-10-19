@@ -151,21 +151,103 @@ def delete_history(session: str):
 
 @app.post('/api/image/generate')
 async def image_generate(prompt:str=Form(...)):
-    key=os.getenv('IMAGE_API_KEY') or os.getenv('LLM_API_KEY')
-    if not key: raise HTTPException(503,'Image API not configured. Set IMAGE_API_KEY.')
-    base=os.getenv('IMAGE_BASE_URL',os.getenv('LLM_BASE_URL','https://api.openai.com/v1')).rstrip('/')
-    async with httpx.AsyncClient(timeout=180) as client:
-        try:
-            r=await client.post(base+'/images/generations',headers={'Authorization':f'Bearer {key}'},json={'model':os.getenv('IMAGE_MODEL','gpt-image-1'),'prompt':prompt[:3000],'size':'1024x1024'})
-            r.raise_for_status(); item=r.json()['data'][0]
-            if item.get('b64_json'): raw=base64.b64decode(item['b64_json'])
+
+@app.post('/api/image/generate')
+async def image_generate(
+    prompt: str = Form(...),
+    style: str = Form('realistic'),
+    size: str = Form('1024x1024')
+):
+    key = os.getenv('IMAGE_API_KEY') or os.getenv('LLM_API_KEY')
+
+    if not key:
+        raise HTTPException(
+            503,
+            'Image API not configured. Set IMAGE_API_KEY.'
+        )
+
+    base = os.getenv(
+        'IMAGE_BASE_URL',
+        os.getenv('LLM_BASE_URL', 'https://api.openai.com/v1')
+    ).rstrip('/')
+
+    allowed_styles = {
+        'realistic': 'photorealistic, natural lighting',
+        'anime': 'anime illustration style',
+        'digital art': 'detailed digital artwork',
+        '3D render': 'high-quality 3D rendered artwork',
+        'watercolor': 'soft watercolor painting'
+    }
+
+    allowed_sizes = [
+        '1024x1024',
+        '1536x1024',
+        '1024x1536'
+    ]
+
+    if size not in allowed_sizes:
+        raise HTTPException(400, 'Invalid image size')
+
+    style_text = allowed_styles.get(
+        style, allowed_styles['realistic']
+    )
+
+    final_prompt = (
+        f"{prompt[:2800]}\n"
+        f"Visual style: {style_text}."
+    )
+
+    payload = {
+        'model': os.getenv('IMAGE_MODEL', 'gpt-image-1'),
+        'prompt': final_prompt,
+        'size': size
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=180) as client:
+            r = await client.post(
+                base + '/images/generations',
+                headers={
+                    'Authorization': f'Bearer {key}'
+                },
+                json=payload
+            )
+
+            r.raise_for_status()
+            item = r.json()['data'][0]
+
+            if item.get('b64_json'):
+                raw = base64.b64decode(item['b64_json'])
             elif item.get('url'):
-                u=item['url']; raw=(await client.get(u)).content
-            else:raise ValueError('No image returned')
-            im=Image.open(io.BytesIO(raw)); im.verify()
-            name=str(uuid.uuid4())+'.png'; Image.open(io.BytesIO(raw)).convert('RGB').save(OUT/name)
-            return {'url':'/generated/'+name}
-        except (httpx.HTTPError,ValueError,KeyError,IndexError) as e:raise HTTPException(502,f'Image provider error: {str(e)[:250]}')
+                image_response = await client.get(item['url'])
+                image_response.raise_for_status()
+                raw = image_response.content
+            else:
+                raise ValueError('No image returned')
+
+            with Image.open(io.BytesIO(raw)) as im:
+                output = im.convert('RGB')
+
+            name = str(uuid.uuid4()) + '.png'
+            output.save(OUT / name)
+
+            return {
+                'url': '/generated/' + name,
+                'style': style,
+                'size': size
+            }
+
+    except (
+        httpx.HTTPError,
+        ValueError,
+        KeyError,
+        IndexError,
+        OSError
+    ) as e:
+        raise HTTPException(
+            502,
+            f'Image provider error: {str(e)[:250]}'
+        )
 
 @app.post('/api/image/edit')
 async def image_edit(file:UploadFile=File(...),operation:str=Form('enhance')):
