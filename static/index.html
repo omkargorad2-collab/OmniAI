@@ -397,6 +397,7 @@ function tab(t){
 
   $('toolTitle').textContent = names[t];
   $('fileWrap').classList.toggle('hidden',t !== 'edit');
+  $('imageOptions').classList.toggle('hidden',t !== 'image');
   $('operationWrap').classList.toggle('hidden',t !== 'edit');
   $('toolPrompt').classList.toggle('hidden',t === 'edit');
   $('toolButton').textContent = t === 'edit' ? 'Edit image' : 'Generate';
