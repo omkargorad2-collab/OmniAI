@@ -159,7 +159,7 @@ async def image_generate(
     style: str = Form('realistic'),
     size: str = Form('1024x1024')
 ):
-    key = os.getenv('IMAGE_API_KEY')
+    key = os.getenv('IMAGE_API_KEY') or os.getenv('LLM_API_KEY')
 
     if not key:
         raise HTTPException(
