@@ -222,31 +222,137 @@ async def image_generate(
                 image_response.raise_for_status()
                 raw = image_response.content
             else:
-                raise ValueError('No image returned')
 
-            with Image.open(io.BytesIO(raw)) as im:
-                output = im.convert('RGB')
+@app.post('/api/image/generate')
+async def image_generate(
+    prompt: str = Form(...),
+    style: str = Form('realistic'),
+    size: str = Form('1024x1024')
+):
+    key = os.getenv('IMAGE_API_KEY')
 
-            name = str(uuid.uuid4()) + '.png'
-            output.save(OUT / name)
-
-            return {
-                'url': '/generated/' + name,
-                'style': style,
-                'size': size
-            }
-
-    except (
-        httpx.HTTPError,
-        ValueError,
-        KeyError,
-        IndexError,
-        OSError
-    ) as e:
+    if not key:
         raise HTTPException(
-            502,
-            f'Image provider error: {str(e)[:250]}'
+            503,
+            'Set IMAGE_API_KEY in Render Environment'
         )
+
+    model = os.getenv(
+        'IMAGE_MODEL', 'gemini-2.5-flash-image'
+    )
+
+    styles = {
+        'realistic': 'photorealistic, natural lighting',
+        'anime': 'anime illustration',
+        'digital art': 'detailed digital artwork',
+        '3D render': 'high-quality 3D render',
+        'watercolor': 'watercolor painting'
+    }
+
+    ratios = {
+        '1024x1024': '1:1',
+        '1536x1024': '3:2',
+        '1024x1536': '2:3'
+    }
+
+    if size not in ratios:
+        raise HTTPException(400, 'Invalid image size')
+
+    final_prompt = (
+        prompt[:2800] + '\nStyle: ' +
+        styles.get(style, styles['realistic'])
+    )
+
+    url = (
+        'https://generativelanguage.googleapis.com'
+        '/v1beta/models/' + model + ':generateContent'
+    )
+
+    payload = {
+        'contents': [{
+            'parts': [{'text': final_prompt}]
+        }],
+        'generationConfig': {
+            'responseModalities': ['TEXT', 'IMAGE'],
+            'imageConfig': {
+                'aspectRatio': ratios[size]
+            }
+        }
+    }
+
+    async with httpx.AsyncClient(timeout=180) as client:
+        try:
+            response = await client.post(
+                url,
+                headers={
+                    'x-goog-api-key': key,
+                    'Content-Type': 'application/json'
+                },
+                json=payload
+            )
+
+            if response.status_code == 429:
+                raise HTTPException(
+                    429,
+                    'Gemini image quota exceeded. '
+                    'Check API usage and rate limits.'
+                )
+
+            if response.status_code != 200:
+                raise HTTPException(
+                    502,
+                    'Gemini image API error: ' +
+                    response.text[:350]
+                )
+
+            data = response.json()
+            candidates = data.get('candidates', [])
+
+            if not candidates:
+                raise HTTPException(
+                    502,
+                    'No image generated: ' +
+                    str(data.get('promptFeedback', ''))[:200]
+                )
+
+            parts = candidates[0].get(
+                'content', {}
+            ).get('parts', [])
+
+            for part in parts:
+                image_data = part.get('inlineData')
+
+                if image_data and image_data.get('data'):
+                    raw = base64.b64decode(
+                        image_data['data']
+                    )
+
+                    with Image.open(io.BytesIO(raw)) as im:
+                        output = im.convert('RGB')
+                        name = str(uuid.uuid4()) + '.png'
+                        output.save(OUT / name)
+
+                    return {
+                        'url': '/generated/' + name,
+                        'style': style,
+                        'size': size
+                    }
+
+            raise HTTPException(
+                502,
+                'Gemini returned no image. Check model access.'
+            )
+
+        except httpx.HTTPError as e:
+            raise HTTPException(
+                502,
+                'Gemini connection error: ' + str(e)[:200]
+            )
+        except (ValueError, OSError, KeyError) as e:
+            raise HTTPException(
+                502,
+                'Image processing error: ' + str(e)[:200]
+            )
 
 @app.post('/api/image/edit')
 async def image_edit(file:UploadFile=File(...),operation:str=Form('enhance')):
